@@ -34,7 +34,7 @@ def preprocess_video(file_path):
     events = np.load(file_path)
     return bin_events_to_frames(events)
 
-# print the shapes of the 5 videos
+# print the shapes of the 10 videos
 for i, file_path in enumerate(file_paths):
     video = preprocess_video(file_path)
     print(f"Video {i + 1} - Shape: {video.shape}")
