@@ -38,16 +38,3 @@ def preprocess_video(file_path):
 for i, file_path in enumerate(file_paths):
     video = preprocess_video(file_path)
     print(f"Video {i + 1} - Shape: {video.shape}")
-    
-    
-# output:
-# Video 1 - Shape: torch.Size([260, 346, 1001])
-# Video 2 - Shape: torch.Size([260, 346, 1001])
-# Video 3 - Shape: torch.Size([260, 346, 1001])
-# Video 4 - Shape: torch.Size([260, 346, 1002])
-# Video 5 - Shape: torch.Size([260, 346, 1001])
-# Video 6 - Shape: torch.Size([260, 346, 998])
-# Video 7 - Shape: torch.Size([260, 346, 1001])
-# Video 8 - Shape: torch.Size([260, 346, 1001])
-# Video 9 - Shape: torch.Size([260, 346, 1001])
-# Video 10 - Shape: torch.Size([260, 346, 1001])
