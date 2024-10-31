@@ -1,6 +1,6 @@
 import numpy as np
 import torch
-from torch.utils.data import DataLoader
+from torch.utils.data import Dataset, DataLoader
 import os
 import glob
 
@@ -26,17 +26,23 @@ def bin_events_to_frames(events):
 
     return frames
 
-# Function to preprocess a video and convert it to frames
-def preprocess_video(idx):
-    events = np.load(file_paths[idx])
-    return bin_events_to_frames(events)
+# Custom Dataset for loading preprocessed videos
+class VideoDataset(Dataset):
+    def __init__(self, file_paths):
+        self.file_paths = file_paths
 
-# Create a dataset from preprocessed videos
-dataset = [preprocess_video(i) for i in range(len(file_paths))]
-data_loader = DataLoader(dataset, batch_size=1, shuffle=True)
+    def __len__(self):
+        return len(self.file_paths)
 
-# Load and print each batch's shape and sample data
-for batch_idx, data_batch in enumerate(data_loader):
-    print(f"Batch {batch_idx + 1}")
-    print("Data shape:", data_batch[0].size())
-    print("Sample data:", data_batch[0])
+    def __getitem__(self, idx):
+        events = np.load(self.file_paths[idx])
+        frames = bin_events_to_frames(events)
+        return frames
+
+# Create the dataset and dataloader
+dataset = VideoDataset(file_paths)
+data_loader = DataLoader(dataset, batch_size=1, shuffle=False)
+
+# Process each batch in the DataLoader and print the shape
+for batch_idx, video in enumerate(data_loader):
+    print(f"Video {batch_idx + 1} - Shape: {video[0].size()}")
