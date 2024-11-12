@@ -73,10 +73,10 @@ if __name__ == '__main__':
 
 
     # Example usage
-    for frames, boxes in train_loader:
+    """for frames, boxes in train_loader:
         print("Frames shape:", frames[0])
         #frame dim: (num_frames, channels, height, width)
         print("Boxes:", boxes)
-        break #just to print 1
+        break #just to print 1"""
 
-    #train(train_dataset)
+    train(train_dataset)
