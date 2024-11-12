@@ -4,7 +4,7 @@ import torch
 from torch.utils.data import Dataset, DataLoader
 import xml.etree.ElementTree as ET
 from torchvision import transforms
-from train import train
+import train as train
 
 class PEDRoDataset(Dataset):
 
@@ -59,6 +59,7 @@ class PEDRoDataset(Dataset):
             break #remove this when we need more than 1 bounding box
         
         boxes = torch.tensor(boxes, dtype=torch.float32)
+        
     
         return frame, boxes  
         
@@ -73,10 +74,10 @@ if __name__ == '__main__':
 
 
     # Example usage
-    """for frames, boxes in train_loader:
+    for frames, boxes in train_loader:
         print("Frames shape:", frames[0])
         #frame dim: (num_frames, channels, height, width)
         print("Boxes:", boxes)
-        break #just to print 1"""
+        break #just to print 1
 
-    train(train_dataset)
+    train.train_model(train_loader)

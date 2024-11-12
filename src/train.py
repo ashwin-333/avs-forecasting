@@ -1,95 +1,68 @@
-import os
-import numpy as np
 import torch
-from torch.utils.data import Dataset, DataLoader
-import xml.etree.ElementTree as ET
-from torchvision import transforms
 from torch import nn
-from snntorch import functional as SF
 from snntorch import surrogate
 import snntorch as snn
+from torch.utils.data import DataLoader
+import torch.optim as optim
 from snntorch import utils
+import preprocessing
 
-from torchvision.ops import box_iou
+device = torch.device("cuda") if torch.cuda.is_available() else torch.device("cpu")
 
+class BoundingBoxPredictor(nn.Module):
+    def __init__(self, img_width=346, img_height=260):
+        super(BoundingBoxPredictor, self).__init__()
+        self.spike_grad = surrogate.atan()
+        self.beta = 0.5
+        self.img_width = img_width
+        self.img_height = img_height
+        self.conv1 = nn.Conv2d(1, 16, 5)
+        self.spike1 = snn.Leaky(beta=self.beta, spike_grad=self.spike_grad, init_hidden=True)
+        self.pool1 = nn.MaxPool2d(2)
+        self.conv2 = nn.Conv2d(16, 128, 5)
+        self.spike2 = snn.Leaky(beta=self.beta, spike_grad=self.spike_grad, init_hidden=True)
+        self.pool2 = nn.MaxPool2d(2)
+        self.fc1 = nn.Linear(128 * 62 * 83, 4)
+        self.sigmoid = nn.Sigmoid()
 
+    def forward(self, x):
+        x = self.conv1(x)
+        x = self.spike1(x)
+        x = self.pool1(x)
+        x = self.conv2(x)
+        x = self.spike2(x)
+        x = self.pool2(x)
+        x = x.view(x.size(0), -1)
+        x = self.fc1(x)
+        x = self.sigmoid(x)
+        scaling = torch.tensor([self.img_width, self.img_height, self.img_width, self.img_height]).to(x.device)
+        x_rescaled = x * scaling
+        return x_rescaled
 
-device = torch.device("cuda") if torch.cuda.is_available() else torch.device("mps") if torch.backends.mps.is_available() else torch.device("cpu")
-
-def train(trainloader):
-    device = torch.device("cuda") if torch.cuda.is_available() else torch.device("cpu")
-
-# neuron and simulation parameters
-    spike_grad = surrogate.atan()
-    beta = 0.5
-
-#  Initialize Network
-    net = nn.Sequential(nn.Conv2d(1, 16, 3),
-                        snn.Leaky(beta=beta, spike_grad=spike_grad, init_hidden=True),
-                        nn.MaxPool2d(2),
-                        nn.Conv2d(16, 128, 3),
-                        snn.Leaky(beta=beta, spike_grad=spike_grad, init_hidden=True),
-                        nn.MaxPool2d(2),
-                        nn.Flatten(),
-                        nn.Linear(5355, 4),
-                        snn.Leaky(beta=beta, spike_grad=spike_grad, init_hidden=True, output=True)
-                        ).to(device)
-    
-    optimizer = torch.optim.Adam(net.parameters(), lr=0.01, betas=(0.9, 0.999))
-    loss_fn = nn.MSELoss()
-
-    num_epochs = 1
-    num_steps = 1
-    #num_iters = 50
-
-    loss_hist = []
-    train_acc_hist = []
-
-    # training loop
+def train(trainloader, model, optimizer, loss_fn, num_epochs=3, num_steps=50):
+    model.train()
     for epoch in range(num_epochs):
-        for i, (data, targets) in enumerate(iter(trainloader)):
-            print(i)
-            data = data.to(device)
-            targets = targets.to(device)
-
-            net.train()
-            spk_rec = forward_pass(net, data, num_steps)
-
-            #Gradient calculation + weight update
-            loss_vals = []
-            for j in range(len(spk_rec[0])):
-                loss_vals.append(loss_fn(spk_rec[0][j], targets[0][j]))
-            
-            total_loss = sum(loss_vals)
-
+        print(f"Starting Epoch {epoch+1}/{num_epochs}")
+        for i, (data, targets) in enumerate(trainloader):
+            data, targets = data.to(device), targets.to(device)
+            if targets.dim() > 2:
+                targets = targets.squeeze(1)
             optimizer.zero_grad()
-            total_loss.backward()
+            utils.reset(model)
+            for step in range(num_steps - 1):
+                _ = model(data)
+            final_output = model(data)
+            loss_val = loss_fn(final_output, targets)
+            loss_val.backward()
             optimizer.step()
-      
+            print(f"Epoch {epoch+1}, Batch {i+1} - Train Loss: {loss_val.item():.2f}")
+            print("Predicted Bounding Box:", final_output.detach().cpu().numpy())
+            print("Actual Bounding Box:", targets.detach().cpu().numpy())
+            print(f"Epoch {epoch+1}, Batch {i+1} - Train Loss: {loss_val.item():.2f}")
+            print("\n")
 
-            # Store loss history for future plotting
-            loss_hist.append(total_loss.item())
-
-            print(f"Epoch {epoch}, Iteration {i} \nTrain Loss: {total_loss.item():.2f}")
-            print("output spikes (bounding box: ) ", end = "")
-            print(spk_rec[0])
-            print("target: ", end = "")
-            print(targets[0])
-
-            #TODO figure out how to calculate accuracy using intersection over union the code below needs changing
-
-            #acc = box_iou(spk_rec, targets) # check what box_iou returns
-            #rain_acc_hist.append(acc)
-            #print(f"Accuracy: {acc * 100:.2f}%\n")
-
-
-def forward_pass(net, data, num_steps):
-    spk_rec = []
-    utils.reset(net)  # resets hidden states for all LIF neurons in net
-
-    for step in range(num_steps):
-        spk_out, _ = net(data)
-        spk_rec.append(spk_out)
-  
-    spk_rec = torch.sum(torch.stack(spk_rec), 1)
-    return spk_rec
+def train_model(train_loader):
+    model = BoundingBoxPredictor().to(device)
+    optimizer = optim.Adam(model.parameters(), lr=1e-4, betas=(0.9, 0.999))
+    loss_fn = nn.MSELoss()
+    train(train_loader, model, optimizer, loss_fn)
