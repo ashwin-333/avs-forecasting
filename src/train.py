@@ -86,24 +86,9 @@ def train(trainloader, model, optimizer, loss_fn, num_epochs=3, num_steps=50):
     loss_hist = []
     iou_hist = []
     coverage_hist = []
-    expected_num_batches = None
-
+    
     for epoch in range(num_epochs):
         print(f"Starting Epoch {epoch+1}/{num_epochs}")
-        
-        # Determine the number of batches
-        current_num_batches = len(trainloader)
-        
-        if epoch == 0:
-            expected_num_batches = current_num_batches
-            print(f"Number of batches in Epoch {epoch+1}: {current_num_batches}")
-        else:
-            print(f"Number of batches in Epoch {epoch+1}: {current_num_batches}")
-            if current_num_batches == expected_num_batches:
-                print(f"Batch count matches Epoch 1: {current_num_batches} batches.\n")
-            else:
-                print(f"Batch count differs from Epoch 1: Epoch {epoch+1} has {current_num_batches} batches vs {expected_num_batches} batches in Epoch 1.\n")
-        
         epoch_loss = 0.0
         epoch_iou = 0.0
         epoch_coverage = 0.0
@@ -152,7 +137,7 @@ def train(trainloader, model, optimizer, loss_fn, num_epochs=3, num_steps=50):
 def plot_metrics(loss_hist, iou_hist, coverage_hist):
     epochs = range(1, len(loss_hist) + 1)
     
-    plt.figure(figsize=(18, 5))
+    plt.figure(figsize=(12, 5))
     
     # Plot Loss
     plt.subplot(1, 3, 1)
