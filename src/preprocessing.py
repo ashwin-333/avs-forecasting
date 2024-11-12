@@ -7,6 +7,7 @@ from torchvision import transforms
 from train import train
 
 class PEDRoDataset(Dataset):
+
     def __init__(self, data_dir, split='train', transform=None):
         """
         Args:
@@ -16,42 +17,37 @@ class PEDRoDataset(Dataset):
         """
         self.data_dir = os.path.join(data_dir, split)
         self.xml_dir = os.path.join(data_dir.replace('numpy', 'xml'), split)
+
         self.frame_files = sorted([f for f in os.listdir(self.data_dir) if f.endswith('.npy')])
+        self.frame_files = self.frame_files[:100] #for now to make code run
+        
         self.transform = transform
-        self.height = 346
-        self.width = 260
+        self.width = 346
+        self.height = 260
+        
 
     def __len__(self):
         return len(self.frame_files)
 
     def __getitem__(self, idx):
-        # Load the numpy frame
         frame_path = os.path.join(self.data_dir, self.frame_files[idx])
-        frame = np.load(frame_path)  # Assuming frame shape is [N, 4] (event-based data)
+        events = np.load(frame_path)
+
+        frame = torch.zeros((self.height, self.width), dtype=torch.int16)
+        for event in events:
+            frame[event[2]][event[1]] = event[3]
+            #only records last events
+        
+        frame.unsqueeze(0)
 
 
-        frame = frame[:100]
-        # Convert events to a 2D frame of fixed size (346 x 260)
-        frame_2d = torch.zeros((self.height, self.width), dtype=torch.float32)
-        
-        # Map events to pixels in the frame
-        x_coords = torch.clamp(torch.tensor(frame[:, 0], dtype=torch.long), 0, self.width - 1)
-        y_coords = torch.clamp(torch.tensor(frame[:, 1], dtype=torch.long), 0, self.height - 1)
-        
-        # Accumulate event counts at each pixel
-        for x, y in zip(x_coords, y_coords):
-            frame_2d[y, x] += 1
-        
-        # Add a channel dimension to match the expected input shape
-        frame_2d = frame_2d.unsqueeze(0)
-
-        # Parse the corresponding XML file
+        # XML stuff
         xml_filename = self.frame_files[idx].replace('.npy', '.xml')
         xml_path = os.path.join(self.xml_dir, xml_filename)
         tree = ET.parse(xml_path)
         root = tree.getroot()
 
-        # Extract bounding box information
+        # Bounding box
         boxes = []
         for obj in root.findall('object'):
             bndbox = obj.find('bndbox')
@@ -60,32 +56,27 @@ class PEDRoDataset(Dataset):
             xmax = int(bndbox.find('xmax').text)
             ymax = int(bndbox.find('ymax').text)
             boxes.append([xmin, ymin, xmax, ymax])
-            break
+            break #remove this when we need more than 1 bounding box
         
-
-        # Convert boxes to a tensor
-        boxes = torch.tensor(boxes, dtype=torch.float32)
-
-        # Apply any transformations
-        if self.transform:
-            frame_2d = self.transform(frame_2d)
+        boxes = torch.tensor(boxes, dtype=torch.int16)
+    
+        return frame, boxes  
         
-        return frame_2d, boxes
 
 if __name__ == '__main__':
-    # Define a transform if needed (e.g., normalization)
-    transform = transforms.Compose([
-        transforms.Normalize(mean=[0.5], std=[0.5])  # Normalize the single channel data
-    ])
 
     # Create a dataset and DataLoader
     data_dir = 'PEDRo-dataset/numpy'
-    train_dataset = PEDRoDataset(data_dir=data_dir, split='train', transform=transform)
-    print("Number of samples in the dataset:", len(train_dataset))
+    train_dataset = PEDRoDataset(data_dir=data_dir, split='train')
     train_loader = DataLoader(train_dataset, batch_size=1, shuffle=False)
 
+
+
     # Example usage
-    #for frames, boxes in train_loader:
-        #print("Frames shape:", frames[0])
-        #print("Boxes:", boxes[0])
-    train(train_dataset)
+    for frames, boxes in train_loader:
+        print("Frames shape:", frames[0])
+        #frame dim: (num_frames, channels, height, width)
+        print("Boxes:", boxes)
+        break #just to print 1
+
+    #train(train_dataset)
