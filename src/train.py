@@ -39,6 +39,17 @@ class BoundingBoxPredictor(nn.Module):
         x_rescaled = x * scaling
         return x_rescaled
 
+def calculate_iou(boxA, boxB):
+    xA = max(boxA[0], boxB[0])
+    yA = max(boxA[1], boxB[1])
+    xB = min(boxA[2], boxB[2])
+    yB = min(boxA[3], boxB[3])
+    interArea = max(0, xB - xA) * max(0, yB - yA)
+    boxAArea = (boxA[2] - boxA[0]) * (boxA[3] - boxA[1])
+    boxBArea = (boxB[2] - boxB[0]) * (boxB[3] - boxB[1])
+    iou = interArea / float(boxAArea + boxBArea - interArea)
+    return iou
+
 def train(trainloader, model, optimizer, loss_fn, num_epochs=3, num_steps=50):
     model.train()
     for epoch in range(num_epochs):
@@ -55,11 +66,14 @@ def train(trainloader, model, optimizer, loss_fn, num_epochs=3, num_steps=50):
             loss_val = loss_fn(final_output, targets)
             loss_val.backward()
             optimizer.step()
+            
+            iou = calculate_iou(final_output.detach().cpu().numpy()[0], targets.detach().cpu().numpy()[0])
+            accuracy = iou * 100
+            
             print(f"Epoch {epoch+1}, Batch {i+1} - Train Loss: {loss_val.item():.2f}")
-            print("Predicted Bounding Box:", final_output.detach().cpu().numpy())
-            print("Actual Bounding Box:", targets.detach().cpu().numpy())
-            print(f"Epoch {epoch+1}, Batch {i+1} - Train Loss: {loss_val.item():.2f}")
-            print("\n")
+            print(f"Predicted Bounding Box: {final_output.detach().cpu().numpy()}")
+            print(f"Actual Bounding Box: {targets.detach().cpu().numpy()}")
+            print(f"Batch Accuracy (IoU): {accuracy:.2f}%\n")
 
 def train_model(train_loader):
     model = BoundingBoxPredictor().to(device)
