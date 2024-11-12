@@ -44,11 +44,29 @@ def calculate_iou(boxA, boxB):
     yA = max(boxA[1], boxB[1])
     xB = min(boxA[2], boxB[2])
     yB = min(boxA[3], boxB[3])
-    interArea = max(0, xB - xA) * max(0, yB - yA)
-    boxAArea = (boxA[2] - boxA[0]) * (boxA[3] - boxA[1])
-    boxBArea = (boxB[2] - boxB[0]) * (boxB[3] - boxB[1])
+
+    interWidth = max(0, xB - xA)
+    interHeight = max(0, yB - yA)
+    interArea = interWidth * interHeight
+
+    boxAArea = max(1, (boxA[2] - boxA[0]) * (boxA[3] - boxA[1]))
+    boxBArea = max(1, (boxB[2] - boxB[0]) * (boxB[3] - boxB[1]))
+
     iou = interArea / float(boxAArea + boxBArea - interArea)
     return iou
+
+def calculate_coverage(pred_box, actual_box):
+    xA = max(pred_box[0], actual_box[0])
+    yA = max(pred_box[1], actual_box[1])
+    xB = min(pred_box[2], actual_box[2])
+    yB = min(pred_box[3], actual_box[3])
+
+    interWidth = max(0, xB - xA)
+    interHeight = max(0, yB - yA)
+    interArea = interWidth * interHeight
+    actualArea = max(1, (actual_box[2] - actual_box[0]) * (actual_box[3] - actual_box[1]))
+    coverage = (interArea / actualArea) * 100
+    return coverage
 
 def train(trainloader, model, optimizer, loss_fn, num_epochs=3, num_steps=50):
     model.train()
@@ -66,14 +84,19 @@ def train(trainloader, model, optimizer, loss_fn, num_epochs=3, num_steps=50):
             loss_val = loss_fn(final_output, targets)
             loss_val.backward()
             optimizer.step()
-            
-            iou = calculate_iou(final_output.detach().cpu().numpy()[0], targets.detach().cpu().numpy()[0])
-            accuracy = iou * 100
-            
-            print(f"Epoch {epoch+1}, Batch {i+1} - Train Loss: {loss_val.item():.2f}")
-            print(f"Predicted Bounding Box: {final_output.detach().cpu().numpy()}")
-            print(f"Actual Bounding Box: {targets.detach().cpu().numpy()}")
-            print(f"Batch Accuracy (IoU): {accuracy:.2f}%\n")
+
+            pred_box = final_output.detach().cpu().numpy()[0]
+            actual_box = targets.detach().cpu().numpy()[0]
+
+            iou = calculate_iou(pred_box, actual_box)
+            coverage = calculate_coverage(pred_box, actual_box)
+            accuracy = coverage
+
+            print(f"Epoch {epoch+1}, Batch {i+1} - Train Loss: {loss_val.item():.4f}")
+            print(f"Predicted Bounding Box: {pred_box}")
+            print(f"Actual Bounding Box: {actual_box}")
+            print(f"Batch IoU: {iou * 100:.2f}%")
+            print(f"Batch Coverage: {coverage:.2f}%\n")
 
 def train_model(train_loader):
     model = BoundingBoxPredictor().to(device)
