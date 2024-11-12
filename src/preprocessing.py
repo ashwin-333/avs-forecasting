@@ -19,7 +19,7 @@ class PEDRoDataset(Dataset):
         self.xml_dir = os.path.join(data_dir.replace('numpy', 'xml'), split)
 
         self.frame_files = sorted([f for f in os.listdir(self.data_dir) if f.endswith('.npy')])
-        self.frame_files = self.frame_files[:100] #for now to make code run
+        #self.frame_files = self.frame_files[:100]
         
         self.transform = transform
         self.width = 346
