@@ -33,7 +33,7 @@ class PEDRoDataset(Dataset):
         frame_path = os.path.join(self.data_dir, self.frame_files[idx])
         events = np.load(frame_path)
 
-        frame = torch.zeros((self.height, self.width), dtype=torch.int16)
+        frame = torch.full((self.height, self.width), fill_value=-1, dtype=torch.int16)
         for event in events:
             frame[event[2]][event[1]] = event[3]
             #only records last events
