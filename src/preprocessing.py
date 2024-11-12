@@ -64,14 +64,11 @@ class PEDRoDataset(Dataset):
         return frame, boxes  
         
 
-if __name__ == '__main__':
-
+def preprocess():
     # Create a dataset and DataLoader
     data_dir = 'PEDRo-dataset/numpy'
     train_dataset = PEDRoDataset(data_dir=data_dir, split='train')
     train_loader = DataLoader(train_dataset, batch_size=1, shuffle=False)
-
-
 
     # Example usage
     for frames, boxes in train_loader:
@@ -79,5 +76,5 @@ if __name__ == '__main__':
         #frame dim: (num_frames, channels, height, width)
         print("Boxes:", boxes)
         break #just to print 1
-
-    train.train_model(train_loader)
+    
+    return train_loader
