@@ -4,42 +4,86 @@ import torch
 from torch.utils.data import Dataset, DataLoader
 import xml.etree.ElementTree as ET
 from torchvision import transforms
+from torch import nn
+from snntorch import functional as SF
+from snntorch import surrogate
+import snntorch as snn
+from snntorch import utils
 
-    device = torch.device("cuda") if torch.cuda.is_available() else torch.device("mps") if torch.backends.mps.is_available() else torch.device("cpu")
 
-    model = Net().to(device)
-    criterion = nn.CrossEntropyLoss()
-    optimizer = optim.Adam(model.parameters(), lr=0.001)
-    num_epochs = 1
 
+device = torch.device("cuda") if torch.cuda.is_available() else torch.device("mps") if torch.backends.mps.is_available() else torch.device("cpu")
+
+def train(trainloader):
+    device = torch.device("cuda") if torch.cuda.is_available() else torch.device("cpu")
+
+# neuron and simulation parameters
+    spike_grad = surrogate.atan()
+    beta = 0.5
+
+#  Initialize Network
+    net = nn.Sequential(nn.Conv2d(1, 16, 5),
+                        snn.Leaky(beta=beta, spike_grad=spike_grad, init_hidden=True),
+                        nn.MaxPool2d(2),
+                        nn.Conv2d(16, 128, 5),
+                        snn.Leaky(beta=beta, spike_grad=spike_grad, init_hidden=True),
+                        nn.MaxPool2d(2),
+                        nn.Flatten(),
+                        nn.Linear(5146, 4),
+                        snn.Leaky(beta=beta, spike_grad=spike_grad, init_hidden=True, output=True)
+                        ).to(device)
+    
+    optimizer = torch.optim.Adam(net.parameters(), lr=1e-2, betas=(0.9, 0.999))
+    loss_fn = SF.mse_count_loss(correct_rate=0.9, incorrect_rate=0.1)
+
+    num_epochs = 3
+    num_steps = 50
+    #num_iters = 50
+
+    loss_hist = []
+    train_acc_hist = []
+
+    # training loop
     for epoch in range(num_epochs):
-        model.train()
-        running_loss = 0.0
-        
-        for i, (inputs, labels) in enumerate(train_loader):
-            inputs, labels = inputs.to(device), labels.to(device)
+        for i, (data, targets) in enumerate(iter(trainloader)):
+            data = data.to(device)
+            targets = targets.to(device)
+            print(data.size())
 
-            # Zero the parameter gradients
-            optimizer.zero_grad()
+            net.train()
+            spk_rec = forward_pass(net, data, num_steps)
+            print(spk_rec.size())
+            for i in range(len(spk_rec)):
+                loss_val = loss_fn(spk_rec[i], targets)
+                optimizer.zero_grad()
+                loss_val.backward()
+                optimizer.step()
 
-            # Forward pass
-            spk3_rec, mem3_rec = model(inputs)
             
-            # Since `spk3_rec` is a time series, we take the mean over time steps
-            # before passing it to the loss (or the final time step if preferred)
-            output = spk3_rec.mean(dim=0)  # Average spike activity over time steps
 
-            # Calculate loss
-            loss = criterion(output, labels)
+
+            # Gradient calculation + weight update
             
-            # Backward pass and optimization
-            loss.backward()
-            optimizer.step()
+            
+            
 
-            # Print statistics
-            running_loss += loss.item()
-            if i % 10 == 9:  # Print every 10 batches
-                print(f"[Epoch {epoch + 1}, Batch {i + 1}] loss: {running_loss / 10:.3f}")
-                running_loss = 0.0
+            # Store loss history for future plotting
+            loss_hist.append(loss_val.item())
 
-    print("Training complete.")
+            print(f"Epoch {epoch}, Iteration {i} \nTrain Loss: {loss_val.item():.2f}")
+
+            acc = SF.accuracy_rate(spk_rec, targets)
+            train_acc_hist.append(acc)
+            print(f"Accuracy: {acc * 100:.2f}%\n")
+
+
+def forward_pass(net, data, num_steps):
+  spk_rec = []
+  utils.reset(net)  # resets hidden states for all LIF neurons in net
+
+  for step in range(num_steps):
+      spk_out, _ = net(data)
+      print(spk_out.size())
+      spk_rec.append(spk_out)
+
+  return torch.stack(spk_rec)

@@ -4,6 +4,7 @@ import torch
 from torch.utils.data import Dataset, DataLoader
 import xml.etree.ElementTree as ET
 from torchvision import transforms
+from train import train
 
 class PEDRoDataset(Dataset):
     def __init__(self, data_dir, split='train', transform=None):
@@ -59,6 +60,8 @@ class PEDRoDataset(Dataset):
             xmax = int(bndbox.find('xmax').text)
             ymax = int(bndbox.find('ymax').text)
             boxes.append([xmin, ymin, xmax, ymax])
+            break
+        
 
         # Convert boxes to a tensor
         boxes = torch.tensor(boxes, dtype=torch.float32)
@@ -66,9 +69,8 @@ class PEDRoDataset(Dataset):
         # Apply any transformations
         if self.transform:
             frame_2d = self.transform(frame_2d)
-
-        sample = {'frame': frame_2d, 'boxes': boxes}
-        return sample
+        
+        return frame_2d, boxes
 
 if __name__ == '__main__':
     # Define a transform if needed (e.g., normalization)
@@ -83,8 +85,7 @@ if __name__ == '__main__':
     train_loader = DataLoader(train_dataset, batch_size=1, shuffle=False)
 
     # Example usage
-    for batch in train_loader:
-        frames = batch['frame']  # Shape: [batch_size, 1, height, width]
-        boxes = batch['boxes']   # Shape: [batch_size, num_boxes, 4]
-        print("Frames shape:", frames.shape)
-        print("Boxes:", boxes)
+    #for frames, boxes in train_loader:
+        #print("Frames shape:", frames[0])
+        #print("Boxes:", boxes[0])
+    train(train_dataset)
