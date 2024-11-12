@@ -38,7 +38,7 @@ class PEDRoDataset(Dataset):
             frame[event[2]][event[1]] = event[3]
             #only records last events
         
-        frame.unsqueeze(0)
+        torch.unsqueeze(frame, 0)
 
 
         # XML stuff
