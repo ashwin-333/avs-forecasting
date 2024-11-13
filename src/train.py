@@ -105,6 +105,8 @@ def train_model(trainloader):
             print(f"Epoch {epoch}, Iteration {i} \nTrain Loss: {loss.item():.2f}")
             print("output spikes (bounding box): ", total_spks)
             print("target: ", targets)
+            print("Predicted Bounding Box: ", pred_box)
+            print("Actual Bounding Box: ", actual_box)
             print(f"IoU: {iou * 100:.2f}%")
             print(f"Coverage: {coverage:.2f}%\n")
 
