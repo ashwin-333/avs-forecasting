@@ -9,19 +9,46 @@ from snntorch import functional as SF
 from snntorch import surrogate
 import snntorch as snn
 from snntorch import utils
-
 from torchvision.ops import box_iou
 
+def calculate_iou(pred_box, target_box):
+    xA = max(pred_box[0], target_box[0])
+    yA = max(pred_box[1], target_box[1])
+    xB = min(pred_box[2], target_box[2])
+    yB = min(pred_box[3], target_box[3])
 
+    interWidth = max(0, xB - xA)
+    interHeight = max(0, yB - yA)
+    interArea = interWidth * interHeight
+
+    boxAArea = max(1, (pred_box[2] - pred_box[0]) * (pred_box[3] - pred_box[1]))
+    boxBArea = max(1, (target_box[2] - target_box[0]) * (target_box[3] - target_box[1]))
+
+    iou = interArea / float(boxAArea + boxBArea - interArea)
+    return iou
+
+def calculate_coverage(pred_box, target_box):
+    xA = max(pred_box[0], target_box[0])
+    yA = max(pred_box[1], target_box[1])
+    xB = min(pred_box[2], target_box[2])
+    yB = min(pred_box[3], target_box[3])
+
+    interWidth = max(0, xB - xA)
+    interHeight = max(0, yB - yA)
+    interArea = interWidth * interHeight
+    actualArea = max(1, (target_box[2] - target_box[0]) * (target_box[3] - target_box[1]))
+    
+    coverage = (interArea / actualArea) * 100
+    return coverage
 
 def train_model(trainloader):
     device = torch.device("cuda") if torch.cuda.is_available() else torch.device("cpu")
 
-# neuron and simulation parameters
+    # neuron and simulation parameters
     spike_grad = surrogate.sigmoid()
     beta = 0.5
 
-#  Initialize Network
+    # Initialize Network
     net = nn.Sequential(nn.Conv2d(1, 64, 3),
                         snn.Leaky(beta=beta, spike_grad=spike_grad, init_hidden=True),
                         nn.MaxPool2d(4),
@@ -29,7 +56,7 @@ def train_model(trainloader):
                         snn.Leaky(beta=beta, spike_grad=spike_grad, init_hidden=True),
                         nn.MaxPool2d(4),
                         nn.Flatten(),
-                        nn.Linear(56448, 4), #better to use more layers and smaller kernel size for pooling - this is so easier to test
+                        nn.Linear(56448, 4),
                         snn.Leaky(beta=beta, spike_grad=spike_grad, init_hidden=True, output=True)
                         ).to(device)
     
@@ -38,7 +65,7 @@ def train_model(trainloader):
 
     num_epochs = 3
     num_steps = 346
-    #num_iters = 50
+    # num_iters = 50
 
     loss_hist = []
     train_acc_hist = []
@@ -46,15 +73,14 @@ def train_model(trainloader):
     # training loop
     for epoch in range(num_epochs):
         for i, (data, targets) in enumerate(iter(trainloader)):
-
             data = data.to(device)
             targets = targets.to(device)
-            targets = targets.squeeze(1) # becomes batch x box (only works when theres one bounding box)
+            targets = targets.squeeze(1)  # becomes batch x box (only works when theres one bounding box)
 
             net.train()
             spk_rec = forward_pass(net, data, num_steps)
             
-            total_spks = torch.sum(spk_rec, 0) #now its batch x outputs (spks * num_steps)
+            total_spks = torch.sum(spk_rec, 0)  # now its batch x outputs (spks * num_steps)
             #idea is to sum up spikes and compare to targets.
 
             #Gradient calculation + weight update
@@ -67,32 +93,29 @@ def train_model(trainloader):
             loss.backward()
             optimizer.step()
       
-
             # Store loss history for future plotting
             loss_hist.append(loss.item())
 
+            # Calculate IoU and Coverage
+            pred_box = total_spks.detach().cpu().numpy().flatten()
+            actual_box = targets.detach().cpu().numpy().flatten()
+            iou = calculate_iou(pred_box, actual_box)
+            coverage = calculate_coverage(pred_box, actual_box)
+
             print(f"Epoch {epoch}, Iteration {i} \nTrain Loss: {loss.item():.2f}")
-            print("output spikes (bounding box: ) ", end = "")
-            print(total_spks)
-            print("target: ", end = "")
-            print(targets)
-
-            #TODO figure out how to calculate accuracy using intersection over union the code below needs changing
-
-            #acc = box_iou(spk_rec, targets) # check what box_iou returns
-            #rain_acc_hist.append(acc)
-            #print(f"Accuracy: {acc * 100:.2f}%\n")
-
+            print("output spikes (bounding box): ", total_spks)
+            print("target: ", targets)
+            print(f"IoU: {iou * 100:.2f}%")
+            print(f"Coverage: {coverage:.2f}%\n")
 
 def forward_pass(net, data, num_steps):
     spk_rec = []
     utils.reset(net)  # resets hidden states for all LIF neurons in net
-
+    
     #this is the time step. Same input is passed in.
     for step in range(num_steps):
         spk_out, _ = net(data)
         spk_rec.append(spk_out)
     
     #print(spk_rec)
-  
-    return torch.stack(spk_rec) #dim(steps, batch, outputs)
+    return torch.stack(spk_rec)  # dim(steps, batch, outputs)
