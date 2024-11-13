@@ -19,11 +19,11 @@ class PEDRoDataset(Dataset):
         self.xml_dir = os.path.join(data_dir.replace('numpy', 'xml'), split)
 
         self.frame_files = sorted([f for f in os.listdir(self.data_dir) if f.endswith('.npy')])
-        #self.frame_files = self.frame_files[:100]
+        self.frame_files = self.frame_files[:100]
         
         self.transform = transform
-        self.width = 346
-        self.height = 260
+        self.width = 348 #pad 2 pixels
+        self.height = 348 #OG is 240 but add padding so image is uniform
         
 
     def __len__(self):
@@ -69,12 +69,5 @@ def preprocess():
     data_dir = 'PEDRo-dataset/numpy'
     train_dataset = PEDRoDataset(data_dir=data_dir, split='train')
     train_loader = DataLoader(train_dataset, batch_size=1, shuffle=False)
-
-    # Example usage
-    for frames, boxes in train_loader:
-        print("Frames shape:", frames[0])
-        #frame dim: (num_frames, channels, height, width)
-        print("Boxes:", boxes)
-        break #just to print 1
     
     return train_loader
