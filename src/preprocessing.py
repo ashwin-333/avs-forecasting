@@ -19,11 +19,10 @@ class PEDRoDataset(Dataset):
         self.xml_dir = os.path.join(data_dir.replace('numpy', 'xml'), split)
 
         self.frame_files = sorted([f for f in os.listdir(self.data_dir) if f.endswith('.npy')])
-        self.frame_files = self.frame_files[:100]
         
         self.transform = transform
-        self.width = 348 #pad 2 pixels
-        self.height = 348 #OG is 240 but add padding so image is uniform
+        self.width = 346 #346
+        self.height = 260 #260
         
 
     def __len__(self):
@@ -33,13 +32,12 @@ class PEDRoDataset(Dataset):
         frame_path = os.path.join(self.data_dir, self.frame_files[idx])
         events = np.load(frame_path)
 
-        frame = torch.full((self.height, self.width), fill_value=-1, dtype=torch.float32)
+        frame = torch.zeros((self.height, self.width), dtype=torch.float32)
         for event in events:
             frame[event[2]][event[1]] = event[3]
             #only records last events
         
         frame = torch.unsqueeze(frame, 0)
-
 
         # XML stuff
         xml_filename = self.frame_files[idx].replace('.npy', '.xml')
@@ -60,7 +58,6 @@ class PEDRoDataset(Dataset):
         
         boxes = torch.tensor(boxes, dtype=torch.float32)
         
-    
         return frame, boxes  
         
 
