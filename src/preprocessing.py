@@ -8,6 +8,16 @@ import train as train
 
 class PEDRoDataset(Dataset):
 
+    def _has_single_bbox(self, frame_file):
+        xml_filename = frame_file.replace('.npy', '.xml')
+        xml_path = os.path.join(self.xml_dir, xml_filename)
+        
+        tree = ET.parse(xml_path)
+        root = tree.getroot()
+        
+        # return True if exactly one bounding box is present
+        return len(root.findall('object')) == 1
+    
     def __init__(self, data_dir, split='train', transform=None):
         """
         Args:
@@ -18,12 +28,11 @@ class PEDRoDataset(Dataset):
         self.data_dir = os.path.join(data_dir, split)
         self.xml_dir = os.path.join(data_dir.replace('numpy', 'xml'), split)
 
-        self.frame_files = sorted([f for f in os.listdir(self.data_dir) if f.endswith('.npy')])
+        self.frame_files = [f for f in sorted(os.listdir(self.data_dir)) if f.endswith('.npy') and self._has_single_bbox(f)]
         
         self.transform = transform
         self.width = 346 #346
         self.height = 260 #260
-        
 
     def __len__(self):
         return len(self.frame_files)
@@ -45,18 +54,12 @@ class PEDRoDataset(Dataset):
         tree = ET.parse(xml_path)
         root = tree.getroot()
 
-        # Bounding box
-        boxes = []
-        for obj in root.findall('object'):
-            bndbox = obj.find('bndbox')
-            xmin = int(bndbox.find('xmin').text)
-            ymin = int(bndbox.find('ymin').text)
-            xmax = int(bndbox.find('xmax').text)
-            ymax = int(bndbox.find('ymax').text)
-            boxes.append([xmin, ymin, xmax, ymax])
-            break #remove this when we need more than 1 bounding box
-        
-        boxes = torch.tensor(boxes, dtype=torch.float32)
+        bndbox = root.find('object').find('bndbox')
+        xmin = int(bndbox.find('xmin').text)
+        ymin = int(bndbox.find('ymin').text)
+        xmax = int(bndbox.find('xmax').text)
+        ymax = int(bndbox.find('ymax').text)
+        boxes = torch.tensor([[xmin, ymin, xmax, ymax]], dtype=torch.float32)
         
         return frame, boxes  
         
