@@ -32,13 +32,14 @@ class PEDRoDataset(Dataset):
                 self.frame_files = self.frame_files[:max_samples]
             self.frames = []
             self.boxes = []
-            for frame_file in self.frame_files:
+            for i, frame_file in enumerate(self.frame_files):
+                print("Frame ", i)
                 frame_path = os.path.join(self.data_dir, frame_file)
                 events = np.load(frame_path)
-                frame = torch.zeros((260, 346), dtype=torch.float32)
-                for event in events:
-                    frame[event[2], event[1]] = event[3]
-                frame = torch.unsqueeze(frame, 0)
+                frame = np.zeros((260, 346), dtype=np.float32)
+                x, y, p = events[:, 2], events[:, 1], events[:, 3]
+                frame[x, y] = p
+                frame = torch.from_numpy(frame).unsqueeze(0)
                 self.frames.append(frame)
                 xml_filename = frame_file.replace('.npy', '.xml')
                 xml_path = os.path.join(self.xml_dir, xml_filename)
