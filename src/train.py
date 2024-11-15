@@ -18,32 +18,40 @@ def train_model(trainloader):
     spike_grad = surrogate.sigmoid()
     beta = 0.5
 
-    net = nn.Sequential(nn.Conv2d(1, 64, 3),
+    net = nn.Sequential(nn.Conv2d(2, 64, 3),
                         snn.Leaky(beta=beta, spike_grad=spike_grad, init_hidden=True),
-                        nn.MaxPool2d(3, stride=2),
+                        nn.MaxPool2d(2),
                         nn.Conv2d(64, 128, 3),
                         snn.Leaky(beta=beta, spike_grad=spike_grad, init_hidden=True),
-                        nn.MaxPool2d(3, stride=2),
+                        nn.Conv2d(128, 128, 3),
+                        snn.Leaky(beta=beta, spike_grad=spike_grad, init_hidden=True),
+                        nn.MaxPool2d(2),
                         nn.Conv2d(128, 256, 3),
                         snn.Leaky(beta=beta, spike_grad=spike_grad, init_hidden=True),
-                        nn.MaxPool2d(3, stride=2),
+                        nn.Conv2d(256, 256, 3),
+                        snn.Leaky(beta=beta, spike_grad=spike_grad, init_hidden=True),
+                        nn.MaxPool2d(2),
                         nn.Conv2d(256, 512, 3),
                         snn.Leaky(beta=beta, spike_grad=spike_grad, init_hidden=True),
-                        nn.MaxPool2d(3, stride=2),
                         nn.Conv2d(512, 512, 3),
                         snn.Leaky(beta=beta, spike_grad=spike_grad, init_hidden=True),
-                        nn.MaxPool2d(3, stride=2),
-                        nn.Flatten(),
-                        nn.Linear(17920, 4096),
+                        nn.MaxPool2d(2),
+                        nn.Conv2d(512, 512, 3),
                         snn.Leaky(beta=beta, spike_grad=spike_grad, init_hidden=True),
-                        nn.Linear(4096, 4)
+                        nn.Conv2d(512, 512, 3),
+                        snn.Leaky(beta=beta, spike_grad=spike_grad, init_hidden=True),
+                        nn.MaxPool2d(2),
+                        nn.Flatten(),
+                        nn.Linear(14336, 4096),
+                        snn.Leaky(beta=beta, spike_grad=spike_grad, init_hidden=True),
+                        nn.Linear(4096, 4),
+                        snn.Leaky(beta=beta, spike_grad=spike_grad, init_hidden=True, output=True, reset_mechanism="none"),
                         ).to(device)
 
     optimizer = torch.optim.Adam(net.parameters(), lr=0.001, betas=(0.9, 0.999))
     loss_fn = nn.MSELoss()
 
     num_epochs = 3
-    num_steps = 5
 
     loss_hist = []
     iou_hist = []
@@ -52,30 +60,22 @@ def train_model(trainloader):
         epoch_loss = 0
         epoch_iou = 0
         for i, (data, targets) in enumerate(iter(trainloader)):
-            data = data.to(device)
-            targets = targets.squeeze(1)
-            targets = targets.to(device)
+            data = data.to(device) # (T x B x C x H x W)
+            targets = targets.squeeze(1) 
+            targets = targets.to(device) # B x 4
 
             net.train()
-            out_arr = forward_pass(net, data, num_steps)
-
-            out_steps = out_arr.sum(0)
-            targets_steps = targets.mul(num_steps)
-
-            if targets_steps.size(0) != 1 or out_steps.size(0) != 1:
-                raise ValueError("Batch size is not 1")
+            spk_rec = forward_pass(net, data)
 
             optimizer.zero_grad()
-            loss = loss_fn(out_steps, targets_steps) / num_steps
+            loss = loss_fn(spk_rec, targets)
             loss.backward()
             optimizer.step()
 
             loss_hist.append(loss.item())
             epoch_loss += loss.item()
 
-            out_avg = out_steps.div(num_steps)
-
-            pred_box = out_avg.detach().cpu().numpy().flatten()
+            pred_box = spk_rec.detach().cpu().numpy().flatten()
             actual_box = targets.detach().cpu().numpy().flatten()
             iou = calculate_iou(pred_box, actual_box)
             iou_hist.append(iou)
@@ -112,13 +112,15 @@ def train_model(trainloader):
     plt.tight_layout()
     plt.show()
 
-def forward_pass(net, data, num_steps):
-    out_rec = []
+def forward_pass(net, data):
+    spk_rec = []
     utils.reset(net)
-    for step in range(num_steps):
-        out = net(data)
-        out_rec.append(out)
-    return torch.stack(out_rec)
+    for step in range(data.size(0)):
+        _, mem_rec = net(data[step])
+        print(mem_rec.shape)
+        spk_rec.append(mem_rec)
+    print("hi", torch.sum(torch.stack(spk_rec), dim=0))
+    return torch.sum(torch.stack(spk_rec), dim=0)
 
 def calculate_iou(pred_box, target_box):
     xA = max(pred_box[0], target_box[0])

@@ -6,12 +6,13 @@ import xml.etree.ElementTree as ET
 import pickle
 
 class PEDRoDataset(Dataset):
-    def __init__(self, data_dir, split='train', transform=None, pickle_file='pedro_data.pkl', max_samples=None):
+    def __init__(self, data_dir, split='train', transform=None, pickle_file='pedro_data.pkl', max_samples=None, timesteps=1):
         self.split = split
         self.pickle_file = pickle_file
         self.transform = transform
         self.width = 346
         self.height = 260
+        self.timesteps = timesteps
 
         #loads pkl files
         if os.path.exists(self.pickle_file):
@@ -35,26 +36,20 @@ class PEDRoDataset(Dataset):
             for i, frame_file in enumerate(self.frame_files):
                 print("Frame ", i)
 
-                #frames
+                #frame
                 frame_path = os.path.join(self.data_dir, frame_file)
                 events = np.load(frame_path)
-                frame = np.zeros((self.height, self.width), dtype=np.float32)
-                x, y, p = events[:, 2], events[:, 1], events[:, 3]
-                frame[x, y] = p
-                frame = torch.from_numpy(frame).unsqueeze(0)
-                self.frames.append(frame)
+                binned_events = self._bin_events(events)
 
-                #bounding boxes - only 1
-                xml_filename = frame_file.replace('.npy', '.xml')
-                xml_path = os.path.join(self.xml_dir, xml_filename)
-                tree = ET.parse(xml_path)
-                root = tree.getroot()
-                bndbox = root.find('object').find('bndbox')
-                xmin = int(bndbox.find('xmin').text)
-                ymin = int(bndbox.find('ymin').text)
-                xmax = int(bndbox.find('xmax').text)
-                ymax = int(bndbox.find('ymax').text)
-                box = torch.tensor([[xmin, ymin, xmax, ymax]], dtype=torch.float32)
+                frame = np.zeros((self.timesteps, 2, self.height, self.width), dtype=np.float32) #0 = negative events, 1 = positive events
+                for t, bin in enumerate(binned_events):
+                    x, y, p = bin[:, 1], bin[:, 2], bin[:, 3]
+                    frame[t,p,y,x] = 1 #This ignores repeated events
+                    #np.add.at(frame, (t, p, y, x), 1) #Adds up repeated events
+                self.frames.append(torch.from_numpy(frame))
+
+                #bounding box
+                box = self._create_bbox(frame_file)
                 self.boxes.append(box)
 
             all_data = {split: {'frames': self.frames, 'boxes': self.boxes}}
@@ -73,9 +68,42 @@ class PEDRoDataset(Dataset):
         tree = ET.parse(xml_path)
         root = tree.getroot()
         return len(root.findall('object')) == 1
+    
+    def _bin_events(self, events):
+        times = events[:, 0]
+        frame_window = (times[-1] - times[0]) // self.timesteps
+        window_start = np.arange(self.timesteps) * frame_window + times[0]
+        window_end = window_start + frame_window
+        indices_start = np.searchsorted(times, window_start)
+        indices_end = np.searchsorted(times, window_end)
+        slices = list(zip(indices_start, indices_end))
 
-def preprocess():
+        return [events[start:end] for start, end in slices]
+    
+    def _create_bbox(self, frame_file):
+        xml_filename = frame_file.replace('.npy', '.xml')
+        xml_path = os.path.join(self.xml_dir, xml_filename)
+
+        tree = ET.parse(xml_path)
+        root = tree.getroot()
+        bndbox = root.find('object').find('bndbox')
+
+        xmin = int(bndbox.find('xmin').text)
+        ymin = int(bndbox.find('ymin').text)
+        xmax = int(bndbox.find('xmax').text)
+        ymax = int(bndbox.find('ymax').text)
+
+        return torch.tensor([[xmin, ymin, xmax, ymax]], dtype=torch.float32)
+
+
+def preprocess(timesteps):
     data_dir = 'PEDRo-dataset/numpy'
-    train_dataset = PEDRoDataset(data_dir=data_dir, split='train', pickle_file='pedro_data.pkl')
-    train_loader = DataLoader(train_dataset, batch_size=1, shuffle=True)
+    train_dataset = PEDRoDataset(data_dir=data_dir, split='train', pickle_file='pedro_data.pkl', timesteps=timesteps)
+    train_loader = DataLoader(train_dataset, batch_size=1, shuffle=True, collate_fn=custom_collate_fn)
     return train_loader
+
+def custom_collate_fn(batch):
+    samples = [sample for sample, target in batch]
+    samples = torch.stack(samples, 1)
+    targets = torch.stack([target for sample, target in batch])
+    return (samples, targets) 
