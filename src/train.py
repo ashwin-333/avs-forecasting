@@ -12,46 +12,68 @@ from snntorch import utils
 from torchvision.ops import box_iou
 import matplotlib.pyplot as plt
 
+class FIL(nn.Module):
+    def __init__(self, in_channels, mid_channels, out_channels, beta, spike_grad):
+        super(FIL, self).__init__()
+        self.net = nn.Sequential(
+            nn.Flatten(),
+            nn.Linear(in_channels, mid_channels),
+            snn.Leaky(beta=beta, spike_grad=spike_grad, init_hidden=True),
+            nn.Linear(mid_channels, out_channels),
+            snn.Leaky(beta=beta, spike_grad=spike_grad, init_hidden=True, output=True, reset_mechanism="none"),
+        )
+    def forward(self, x: torch.Tensor):
+        x = torch.sum(x, dim=0)
+        _, mem_rec = self.net(x)
+        return mem_rec
+class SCNN(nn.Module):
+    def __init__(self, beta, spike_grad):
+        super(SCNN, self).__init__()
+        self.net = nn.Sequential(nn.Conv2d(2, 64, 3),
+            snn.Leaky(beta=beta, spike_grad=spike_grad, init_hidden=True),
+            nn.MaxPool2d(2),
+            nn.Conv2d(64, 128, 3),
+            snn.Leaky(beta=beta, spike_grad=spike_grad, init_hidden=True),
+            nn.Conv2d(128, 128, 3),
+            snn.Leaky(beta=beta, spike_grad=spike_grad, init_hidden=True),
+            nn.MaxPool2d(2),
+            nn.Conv2d(128, 256, 3),
+            snn.Leaky(beta=beta, spike_grad=spike_grad, init_hidden=True),
+            nn.Conv2d(256, 256, 3),
+            snn.Leaky(beta=beta, spike_grad=spike_grad, init_hidden=True),
+            nn.MaxPool2d(2),
+            nn.Conv2d(256, 512, 3),
+            snn.Leaky(beta=beta, spike_grad=spike_grad, init_hidden=True),
+            nn.Conv2d(512, 512, 3),
+            snn.Leaky(beta=beta, spike_grad=spike_grad, init_hidden=True),
+            nn.MaxPool2d(2),
+            nn.Conv2d(512, 512, 3),
+            snn.Leaky(beta=beta, spike_grad=spike_grad, init_hidden=True),
+            nn.Conv2d(512, 512, 3),
+            snn.Leaky(beta=beta, spike_grad=spike_grad, init_hidden=True),
+            nn.MaxPool2d(2))
+    def forward(self, x: torch.Tensor):
+        spk_rec = []
+        utils.reset(self.net)
+        for step in range(x.size(0)):
+            out = self.net(x[step])
+            spk_rec.append(out)
+        return torch.stack(spk_rec)
+
 def train_model(trainloader):
     device = torch.device("cuda") if torch.cuda.is_available() else torch.device("cpu")
 
     spike_grad = surrogate.sigmoid()
     beta = 0.5
 
-    net = nn.Sequential(nn.Conv2d(2, 64, 3),
-                        snn.Leaky(beta=beta, spike_grad=spike_grad, init_hidden=True),
-                        nn.MaxPool2d(2),
-                        nn.Conv2d(64, 128, 3),
-                        snn.Leaky(beta=beta, spike_grad=spike_grad, init_hidden=True),
-                        nn.Conv2d(128, 128, 3),
-                        snn.Leaky(beta=beta, spike_grad=spike_grad, init_hidden=True),
-                        nn.MaxPool2d(2),
-                        nn.Conv2d(128, 256, 3),
-                        snn.Leaky(beta=beta, spike_grad=spike_grad, init_hidden=True),
-                        nn.Conv2d(256, 256, 3),
-                        snn.Leaky(beta=beta, spike_grad=spike_grad, init_hidden=True),
-                        nn.MaxPool2d(2),
-                        nn.Conv2d(256, 512, 3),
-                        snn.Leaky(beta=beta, spike_grad=spike_grad, init_hidden=True),
-                        nn.Conv2d(512, 512, 3),
-                        snn.Leaky(beta=beta, spike_grad=spike_grad, init_hidden=True),
-                        nn.MaxPool2d(2),
-                        nn.Conv2d(512, 512, 3),
-                        snn.Leaky(beta=beta, spike_grad=spike_grad, init_hidden=True),
-                        nn.Conv2d(512, 512, 3),
-                        snn.Leaky(beta=beta, spike_grad=spike_grad, init_hidden=True),
-                        nn.MaxPool2d(2),
-                        nn.Flatten(),
-                        nn.Linear(14336, 4096),
-                        snn.Leaky(beta=beta, spike_grad=spike_grad, init_hidden=True),
-                        nn.Linear(4096, 4),
-                        snn.Leaky(beta=beta, spike_grad=spike_grad, init_hidden=True, output=True, reset_mechanism="none"),
+    net = nn.Sequential(SCNN(beta, spike_grad),
+                        FIL(14336, 4096, 4, beta=beta, spike_grad=spike_grad)
                         ).to(device)
 
-    optimizer = torch.optim.Adam(net.parameters(), lr=0.001, betas=(0.9, 0.999))
+    optimizer = torch.optim.Adam(net.parameters(), lr=0.1, betas=(0.9, 0.999))
     loss_fn = nn.MSELoss()
 
-    num_epochs = 3
+    num_epochs = 20
 
     loss_hist = []
     iou_hist = []
@@ -65,7 +87,9 @@ def train_model(trainloader):
             targets = targets.to(device) # B x 4
 
             net.train()
-            spk_rec = forward_pass(net, data)
+            spk_rec = net(data)
+            sample_out = spk_rec[-1]
+            sample_target = targets[-1]
 
             optimizer.zero_grad()
             loss = loss_fn(spk_rec, targets)
@@ -75,8 +99,8 @@ def train_model(trainloader):
             loss_hist.append(loss.item())
             epoch_loss += loss.item()
 
-            pred_box = spk_rec.detach().cpu().numpy().flatten()
-            actual_box = targets.detach().cpu().numpy().flatten()
+            pred_box = sample_out.detach().cpu().numpy().flatten()
+            actual_box = sample_target.detach().cpu().numpy().flatten()
             iou = calculate_iou(pred_box, actual_box)
             iou_hist.append(iou)
             epoch_iou += iou
@@ -113,14 +137,7 @@ def train_model(trainloader):
     plt.show()
 
 def forward_pass(net, data):
-    spk_rec = []
-    utils.reset(net)
-    for step in range(data.size(0)):
-        _, mem_rec = net(data[step])
-        print(mem_rec.shape)
-        spk_rec.append(mem_rec)
-    print("hi", torch.sum(torch.stack(spk_rec), dim=0))
-    return torch.sum(torch.stack(spk_rec), dim=0)
+    return net(data)
 
 def calculate_iou(pred_box, target_box):
     xA = max(pred_box[0], target_box[0])

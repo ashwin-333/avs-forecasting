@@ -97,7 +97,7 @@ class PEDRoDataset(Dataset):
 
 
 def preprocess(timesteps):
-    data_dir = 'PEDRo-dataset/numpy'
+    data_dir = os.path.join('PEDRo-dataset', 'numpy')
     train_dataset = PEDRoDataset(data_dir=data_dir, split='train', pickle_file='pedro_data.pkl', timesteps=timesteps)
     train_loader = DataLoader(train_dataset, batch_size=1, shuffle=True, collate_fn=custom_collate_fn)
     return train_loader
