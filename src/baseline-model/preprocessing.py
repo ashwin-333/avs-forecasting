@@ -98,12 +98,14 @@ class PEDRoDataset(Dataset):
 
 def preprocess(timesteps):
     data_dir = os.path.join('PEDRo-dataset', 'numpy')
-    train_dataset = PEDRoDataset(data_dir=data_dir, split='train', pickle_file='pedro_data.pkl', timesteps=timesteps)
-    train_loader = DataLoader(train_dataset, batch_size=1, shuffle=True, collate_fn=custom_collate_fn)
-    return train_loader
+    train_dataset = PEDRoDataset(data_dir=data_dir, split='train', pickle_file='train.pkl', timesteps=timesteps)
+    val_dataset = PEDRoDataset(data_dir=data_dir, split='val', pickle_file='val.pkl', timesteps=timesteps)
+    train_loader = DataLoader(train_dataset, batch_size=32, shuffle=True, collate_fn=custom_collate_fn, num_workers = 4, persistent_workers=True)
+    val_loader = DataLoader(val_dataset, batch_size=32, shuffle=False, collate_fn=custom_collate_fn)
+    return (train_loader, val_loader)
 
 def custom_collate_fn(batch):
-    samples = [sample for sample, target in batch]
+    samples = [sample for sample, _ in batch]
     samples = torch.stack(samples, 1)
-    targets = torch.stack([target for sample, target in batch])
+    targets = torch.stack([target for _, target in batch])
     return (samples, targets) 
