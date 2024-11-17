@@ -12,6 +12,8 @@ import matplotlib.patches as patches
 
 def train_model(trainloader, valloader):
     device = torch.device("cuda") if torch.cuda.is_available() else torch.device("cpu")
+    loss_fn = distance_box_iou_loss
+    accuracy_fn = calculate_iou
 
     spike_grad = surrogate.atan()
     beta = 0.5
@@ -41,7 +43,7 @@ def train_model(trainloader, valloader):
             out = net(data)
 
             optimizer.zero_grad()
-            train_loss = torch.sum(distance_box_iou_loss(out, targets)) / batch_size
+            train_loss = torch.sum(loss_fn(out, targets)) / batch_size
             train_loss.backward()
             optimizer.step()
 
@@ -51,7 +53,7 @@ def train_model(trainloader, valloader):
             pred_box = out.detach().cpu().numpy()
             actual_box = targets.detach().cpu().numpy()
 
-            train_iou = np.sum(calculate_iou(pred_box, actual_box), axis=0) / batch_size
+            train_iou = np.sum(accuracy_fn(pred_box, actual_box), axis=0) / batch_size
             #train_iou_hist.append(train_iou.item())
             epoch_train_iou += train_iou
 
@@ -72,7 +74,7 @@ def train_model(trainloader, valloader):
         train_loss_hist.append(avg_train_loss)
         train_iou_hist.append(avg_train_iou)
 
-        val_loss, val_iou = validate(net, valloader, device)
+        val_loss, val_iou = validate(net, valloader, loss_fn, accuracy_fn, device)
         val_loss_hist.append(val_loss)
         val_iou_hist.append(val_iou)
         
@@ -102,7 +104,7 @@ def train_model(trainloader, valloader):
     plt.tight_layout()
     plt.show()
 
-def validate(net, val_loader, device):
+def validate(net, val_loader, loss_fn, accuracy_fn, device):
     net.eval()
     val_loss = 0
     val_iou = 0
@@ -116,12 +118,12 @@ def validate(net, val_loader, device):
             # Forward pass
             out = net(data)
 
-            loss = torch.sum(distance_box_iou_loss(out, targets)) / batch_size
+            loss = torch.sum(loss_fn(out, targets)) / batch_size
             val_loss += loss.item()  
 
             pred_box = out.detach().cpu()
             actual_box = targets.detach().cpu()
-            iou = np.sum(calculate_iou(pred_box, actual_box).numpy(), axis=0) / batch_size
+            iou = np.sum(accuracy_fn(pred_box, actual_box).numpy(), axis=0) / batch_size
             val_iou += iou.item()
     
     avg_val_loss = val_loss / len(val_loader)
