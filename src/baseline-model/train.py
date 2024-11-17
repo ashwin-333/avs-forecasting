@@ -57,12 +57,12 @@ def train_model(trainloader, valloader):
 
             if i < 5 and epoch == 0:
                 image = data[:, 0].cpu()
-                image = image[-1]
-                visualize_bounding_boxes([image], [pred_box[-1]], [actual_box[-1]])
+                image = torch.sum(image, dim = 0)
+                visualize_bounding_boxes([image], [pred_box[0]], [actual_box[0]])
 
             print(f"Epoch {epoch}, Iteration {i} \nTrain Loss: {train_loss.item():.2f}")
-            print("Sample predicted Bounding Box: ", pred_box[-1])
-            print("Sample actual Bounding Box: ", actual_box[-1])
+            print("Sample predicted Bounding Box: ", pred_box[0])
+            print("Sample actual Bounding Box: ", actual_box[0])
             print(f"Train IoU: {train_iou * 100:.2f}%")
             print()
 
@@ -77,6 +77,8 @@ def train_model(trainloader, valloader):
         val_iou_hist.append(val_iou)
         
         print(f"Epoch {epoch+1}/{num_epochs}, Validation Loss: {val_loss:.4f}, Validation Accuracy: {val_iou:.4f}")
+        if epoch % 10 == 0:
+            save_checkpoint(net, optimizer, epoch, np.sum(train_loss_hist).item(), checkpoint_path="checkpoint.pth")
 
     epochs = list(range(1, num_epochs + 1))
 
@@ -106,14 +108,13 @@ def validate(net, val_loader, device):
     val_iou = 0
     
     with torch.no_grad():  # Disable gradient calculation
-        for data, targets in val_loader:
+        for i, (data, targets) in enumerate(iter(val_loader)):
             batch_size = data.size(1)
             # Move inputs and targets to the appropriate device
             data, targets = data.to(device), targets.squeeze(1).to(device)
 
             # Forward pass
             out = net(data)
-            
 
             loss = torch.sum(distance_box_iou_loss(out, targets)) / batch_size
             val_loss += loss.item()  
@@ -204,3 +205,27 @@ def visualize_bounding_boxes(images, pred_boxes, target_boxes):
 
     plt.tight_layout()
     plt.show()
+
+def save_checkpoint(model, optimizer, epoch, loss, checkpoint_path="checkpoint.pth"):
+    checkpoint = {
+        'epoch': epoch,
+        'model_state_dict': model.state_dict(),
+        'optimizer_state_dict': optimizer.state_dict(),
+        'loss': loss 
+    }
+    torch.save(checkpoint, checkpoint_path)
+    print(f"Checkpoint saved at {checkpoint_path}")
+
+def load_checkpoint(model, optimizer, checkpoint_path="model_checkpoint.pth"):
+    checkpoint = torch.load(checkpoint_path)
+    
+    model.load_state_dict(checkpoint['model_state_dict'])
+    
+    optimizer.load_state_dict(checkpoint['optimizer_state_dict'])
+    
+    epoch = checkpoint['epoch']
+    loss = checkpoint['loss']
+    
+    print(f"Checkpoint loaded from {checkpoint_path}, starting from epoch {epoch}")
+    
+    return model, optimizer, epoch, loss
