@@ -11,7 +11,12 @@ PEDRo-dataset/
 ├── xml/                 # XML files for annotations
 ├── yolo/                # YOLO-specific files and configurations
 src/
-├── main.py              # Main script to run the model
-├── preprocessing.py     # Script for data preprocessing
-├── train.py             # Script for training the model
+├── baseline-model/       # Baseline model implementation
+│   ├── main.py           # Main script to run the baseline model
+│   ├── train.py          # Script for training the baseline model
+│   ├── preprocessing.py  # Script for data preprocessing for baseline model
+│   ├── model.py          # Baseline model architecture
+├── spike-yolo/           # SpikeYOLO implementation
+│   ├── main.py           # Main script to run the SpikeYOLO model
+│   ├── preprocessing.py  # Script for data preprocessing for SpikeYOLO
 README.md                # Project documentation
