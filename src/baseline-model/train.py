@@ -25,6 +25,9 @@ def train_model(trainloader, valloader):
     train_loss_hist = []
     train_iou_hist = []
 
+    val_loss_hist = []
+    val_iou_hist = []
+
     for epoch in range(num_epochs):
         epoch_train_loss = 0
         epoch_train_iou = 0
@@ -42,20 +45,20 @@ def train_model(trainloader, valloader):
             train_loss.backward()
             optimizer.step()
 
-            train_loss_hist.append(train_loss.item())
+            #train_loss_hist.append(train_loss.item())
             epoch_train_loss += train_loss.item()
 
             pred_box = out.detach().cpu().numpy()
             actual_box = targets.detach().cpu().numpy()
 
             train_iou = np.sum(calculate_iou(pred_box, actual_box), axis=0) / batch_size
-            train_iou_hist.append(train_iou.item())
+            #train_iou_hist.append(train_iou.item())
             epoch_train_iou += train_iou
 
             if i < 5 and epoch == 0:
                 image = data[:, 0].cpu()
                 image = image[-1]
-                visualize_bounding_boxes([image], [pred_box[0]], [actual_box[0]])
+                visualize_bounding_boxes([image], [pred_box[-1]], [actual_box[-1]])
 
             print(f"Epoch {epoch}, Iteration {i} \nTrain Loss: {train_loss.item():.2f}")
             print("Sample predicted Bounding Box: ", pred_box[-1])
@@ -69,61 +72,59 @@ def train_model(trainloader, valloader):
         train_loss_hist.append(avg_train_loss)
         train_iou_hist.append(avg_train_iou)
 
-    val_loss, val_iou = validate(net, valloader, device)
-    print(f"Epoch {epoch+1}/{num_epochs}, Validation Loss: {val_loss:.4f}, Validation Accuracy: {val_iou:.4f}")
+        val_loss, val_iou = validate(net, valloader, device)
+        val_loss_hist.append(val_loss)
+        val_iou_hist.append(val_iou)
+        
+        print(f"Epoch {epoch+1}/{num_epochs}, Validation Loss: {val_loss:.4f}, Validation Accuracy: {val_iou:.4f}")
 
     epochs = list(range(1, num_epochs + 1))
 
-    avg_epoch_train_loss = [np.mean(train_loss_hist[i * len(trainloader):(i + 1) * len(trainloader)]) for i in range(num_epochs)]
-    avg_epoch_train_iou = [np.mean(train_iou_hist[i * len(trainloader):(i + 1) * len(trainloader)]) for i in range(num_epochs)]
+    #avg_epoch_train_loss = [np.mean(train_loss_hist[i * len(trainloader):(i + 1) * len(trainloader)]) for i in range(num_epochs)]
+    #avg_epoch_train_iou = [np.mean(train_iou_hist[i * len(trainloader):(i + 1) * len(trainloader)]) for i in range(num_epochs)]
 
     plt.figure()
     plt.subplot(1, 2, 1)
-    plt.plot(epochs, avg_epoch_train_loss, label="Average train loss per Epoch")
-    plt.plot(epochs, val_loss, label="Average train loss per Epoch")
+    plt.plot(epochs, train_loss_hist, label="Average train loss per Epoch")
+    plt.plot(epochs, val_loss_hist, label="Average val loss per Epoch")
     plt.xlabel("Epoch")
     plt.ylabel("Loss")
     plt.legend()
 
     plt.subplot(1, 2, 2)
-    plt.plot(epochs, avg_epoch_train_iou, label="Average train IoU per Epoch")
-    plt.plot(epochs, val_iou, label="Average val IoU per Epoch")
+    plt.plot(epochs, train_iou_hist, label="Average train IoU per Epoch")
+    plt.plot(epochs, val_iou_hist, label="Average val IoU per Epoch")
     plt.xlabel("Epoch")
     plt.ylabel("IoU")
     plt.legend()
     plt.tight_layout()
     plt.show()
 
-def validate(net, valloader, device):
+def validate(net, val_loader, device):
     net.eval()
     val_loss = 0
     val_iou = 0
     
     with torch.no_grad():  # Disable gradient calculation
-        for data, targets in valloader:
-            batch_size = data.shape(1)
+        for data, targets in val_loader:
+            batch_size = data.size(1)
             # Move inputs and targets to the appropriate device
             data, targets = data.to(device), targets.squeeze(1).to(device)
 
             # Forward pass
             out = net(data)
             
-            # Calculate the loss
-            loss = torch.sum(distance_box_iou_loss(out, targets)) / batch_size
-            val_loss += loss.item()  # Accumulate the validation loss
 
-            # Example metric calculation (adjust as needed)
-            # For classification:
+            loss = torch.sum(distance_box_iou_loss(out, targets)) / batch_size
+            val_loss += loss.item()  
+
             pred_box = out.detach().cpu()
             actual_box = targets.detach().cpu()
-            iou = np.sum(calculate_iou(pred_box, actual_box), axis=0) / batch_size
+            iou = np.sum(calculate_iou(pred_box, actual_box).numpy(), axis=0) / batch_size
             val_iou += iou.item()
-
-            total_samples += targets.size(0)
     
-    # Calculate average loss and accuracy
-    avg_val_loss = val_loss / len(valloader)
-    avg_val_iou = val_iou / len(valloader)  # Example: accuracy for classification
+    avg_val_loss = val_loss / len(val_loader)
+    avg_val_iou = val_iou / len(val_loader) 
 
     return avg_val_loss, avg_val_iou
 
