@@ -2,6 +2,7 @@ import torch
 import torch.nn as nn
 import snntorch as snn
 from snntorch import utils
+from snntorch import surrogate
 
 
 class SCNN(nn.Module):
@@ -56,10 +57,12 @@ class FIL(nn.Module):
         return mem_rec
     
 class Model(nn.Module):
-    def __init__(self, beta, spike_grad):
+    def __init__(self):
         super(Model, self).__init__()
         
         # Define the layers and components in the constructor (__init__)
+        beta = 0.5
+        spike_grad = surrogate.atan()
         self.scnn = SCNN(beta, spike_grad)
         self.fil = FIL(1536, 4096, 4, beta=beta, spike_grad=spike_grad)
         
