@@ -96,13 +96,20 @@ class PEDRoDataset(Dataset):
         return torch.tensor([[xmin, ymin, xmax, ymax]], dtype=torch.float32)
 
 
-def preprocess(timesteps):
+def preprocess_train(timesteps):
     data_dir = os.path.join('PEDRo-dataset', 'numpy')
     train_dataset = PEDRoDataset(data_dir=data_dir, split='train', pickle_file='train.pkl', timesteps=timesteps)
     val_dataset = PEDRoDataset(data_dir=data_dir, split='val', pickle_file='val.pkl', timesteps=timesteps)
+
     train_loader = DataLoader(train_dataset, batch_size=32, shuffle=True, collate_fn=custom_collate_fn, num_workers = 4, persistent_workers=True)
     val_loader = DataLoader(val_dataset, batch_size=32, shuffle=False, collate_fn=custom_collate_fn)
     return (train_loader, val_loader)
+
+def preprocess_test(timesteps):
+    data_dir = os.path.join('PEDRo-dataset', 'numpy')
+    test_dataset = PEDRoDataset(data_dir=data_dir, split='test', pickle_file='test.pkl', timesteps=timesteps)
+    test_loader = DataLoader(test_dataset, batch_size=32, shuffle=False, collate_fn=custom_collate_fn)
+    return test_loader
 
 def custom_collate_fn(batch):
     samples = [sample for sample, _ in batch]
