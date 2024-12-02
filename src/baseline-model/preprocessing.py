@@ -14,6 +14,8 @@ class PEDRoDataset(Dataset):
         self.height = 260
         self.timesteps = timesteps
 
+        
+
         #loads pkl files
         if os.path.exists(self.pickle_file):
             with open(self.pickle_file, 'rb') as f:
@@ -33,6 +35,9 @@ class PEDRoDataset(Dataset):
 
             self.frames = []
             self.boxes = []
+            #shape = (len(self.frame_files), 2, self.height, self.width) # Frames x C x H x W
+            #data_array = np.memmap('pickle_file', dtype=np.float32, mode='w+', shape=shape)
+
             for i, frame_file in enumerate(self.frame_files):
                 print("Frame ", i)
 
@@ -116,3 +121,26 @@ def custom_collate_fn(batch):
     samples = torch.stack(samples, 1)
     targets = torch.stack([target for _, target in batch])
     return (samples, targets) 
+
+
+import numpy as np
+
+def mask_frame(frame, grid_size, n):
+    _, h, w = frame.shape #frame must be of C x H x W. Need to change for it to work w timesteps + batches
+
+    if h % grid_size != 0 or w % grid_size != 0:
+        raise ValueError("Frame dimensions must be divisible by the grid size.")
+
+    reshaped = frame[0].reshape(h // grid_size, grid_size, w // grid_size, grid_size)
+    grid_sums = reshaped.sum(axis=(1, 3))
+
+    flat_indices = np.argsort(grid_sums.flatten())[:n]
+    mask_grid = np.ones_like(grid_sums, dtype=bool)
+    mask_grid.flat[flat_indices] = False
+
+    mask = mask_grid.repeat(grid_size, axis=0).repeat(grid_size, axis=1)
+
+    processed_frame = frame[0] * mask
+    processed_frame.expand_dims(0)
+
+    return processed_frame
