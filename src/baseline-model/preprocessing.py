@@ -4,17 +4,17 @@ import torch
 from torch.utils.data import Dataset, DataLoader
 import xml.etree.ElementTree as ET
 import pickle
+import matplotlib.pyplot as plt
 
 class PEDRoDataset(Dataset):
     def __init__(self, data_dir, split='train', transform=None, pickle_file='pedro_data.pkl', max_samples=None, timesteps=1):
         self.split = split
         self.pickle_file = pickle_file
         self.transform = transform
-        self.width = 346
-        self.height = 260
+        #adding padding to images
+        self.width = 350
+        self.height = 350
         self.timesteps = timesteps
-
-        
 
         #loads pkl files
         if os.path.exists(self.pickle_file):
@@ -122,25 +122,18 @@ def custom_collate_fn(batch):
     targets = torch.stack([target for _, target in batch])
     return (samples, targets) 
 
-
-import numpy as np
-
-def mask_frame(frame, grid_size, n):
-    _, h, w = frame.shape #frame must be of C x H x W. Need to change for it to work w timesteps + batches
+def mask_frame(frame, grid_size, threshold=0.7, width=None, height=None):
+    _, h, w = frame.shape
+    cell_size = grid_size * grid_size
 
     if h % grid_size != 0 or w % grid_size != 0:
         raise ValueError("Frame dimensions must be divisible by the grid size.")
 
     reshaped = frame[0].reshape(h // grid_size, grid_size, w // grid_size, grid_size)
-    grid_sums = reshaped.sum(axis=(1, 3))
-
-    flat_indices = np.argsort(grid_sums.flatten())[:n]
-    mask_grid = np.ones_like(grid_sums, dtype=bool)
-    mask_grid.flat[flat_indices] = False
-
+    grid_true_ratios = reshaped.sum(axis=(1, 3)) / cell_size
+    mask_grid = grid_true_ratios >= threshold
     mask = mask_grid.repeat(grid_size, axis=0).repeat(grid_size, axis=1)
-
-    processed_frame = frame[0] * mask
-    processed_frame.expand_dims(0)
+    processed_frame = frame * mask[np.newaxis, :, :]
 
     return processed_frame
+
