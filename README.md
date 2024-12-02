@@ -18,9 +18,11 @@ src/
 │   ├── model.py          # Baseline model architecture
 │   ├── utils.py          # Helper functions for model utilities
 │   ├── test_model.py     # Script for testing the baseline model
-├── spike-yolo/           # SpikeYOLO implementation
-│   ├── main.py           # Main script to run the SpikeYOLO model
-│   ├── preprocessing.py  # Script for data preprocessing for SpikeYOLO
 ├── spike-based-masking/  # Spike based masking implementation
-│   ├── main.py           # Main script to run the spike based masking
+|   |── main.py           # Main script to run the baseline model
+│   ├── train.py          # Script for training the baseline model
+│   ├── preprocessing.py  # Script for data preprocessing for baseline model
+│   ├── model.py          # Baseline model architecture
+│   ├── utils.py          # Helper functions for model utilities
+│   ├── test_model.py     # Script for testing the baseline model
 README.md                # Project documentation
