@@ -2,8 +2,8 @@ import numpy as np
 import matplotlib.pyplot as plt
 import matplotlib.patches as patches
 import torch
-
-
+import matplotlib.pyplot as plt
+from preprocessing import PEDRoDataset, mask_frame
 
 def visualize_bounding_boxes(images, pred_boxes, target_boxes):
     num_images = len(images)
@@ -96,3 +96,35 @@ def load_checkpoint(model, optimizer, checkpoint_path="checkpoint.pth"):
     print(f"Checkpoint loaded from {checkpoint_path}, starting from epoch {epoch}")
     
     return epoch, loss
+
+def test_masking(data_dir, grid_size=10, threshold=0.7):
+    train_dataset = PEDRoDataset(data_dir=data_dir, split='train', pickle_file='train.pkl', timesteps=4)
+
+    print("Applying mask_frame to the first 5 frames and plotting...")
+
+    for idx in range(5):
+        frame, _ = train_dataset[idx]
+        timestep_frame = frame[0].numpy()
+
+        masked_frame = mask_frame(timestep_frame, grid_size=grid_size, threshold=threshold)
+
+        plt.figure(figsize=(12, 6))
+
+        plt.subplot(1, 2, 1)
+        if timestep_frame.shape[0] == 3:
+            plt.imshow(timestep_frame.transpose(1, 2, 0))
+        else:
+            plt.imshow(timestep_frame[0], cmap='gray')
+        plt.title(f"Original Frame {idx}")
+        plt.axis('off')
+
+        plt.subplot(1, 2, 2)
+        if masked_frame.shape[0] == 3:
+            plt.imshow(masked_frame.transpose(1, 2, 0))
+        else:
+            plt.imshow(masked_frame[0], cmap='gray')
+        plt.title(f"Masked Frame {idx}")
+        plt.axis('off')
+
+        plt.tight_layout()
+        plt.show()

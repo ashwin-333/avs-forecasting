@@ -64,7 +64,7 @@ class Model(nn.Module):
         beta = 0.5
         spike_grad = surrogate.atan()
         self.scnn = SCNN(beta, spike_grad)
-        self.fil = FIL(1536, 4096, 4, beta=beta, spike_grad=spike_grad)
+        self.fil = FIL(2048, 4096, 4, beta=beta, spike_grad=spike_grad)
         
     def forward(self, x):
         # Define the forward pass
