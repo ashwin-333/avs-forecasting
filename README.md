@@ -22,7 +22,7 @@ src/
 |   |── main.py           # Main script to run the spike based masking
 │   ├── train.py          # Script for training with spike based masking
 │   ├── preprocessing.py  # Script for data preprocessing for spike based masking
-│   ├── model.py          # Baseline model architecture
+│   ├── model.py          # Spike based masking model architecture
 │   ├── utils.py          # Helper functions for model utilities
 │   ├── test_model.py     # Script for testing with spike based masking
 README.md                # Project documentation
