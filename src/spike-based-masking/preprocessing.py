@@ -8,66 +8,63 @@ import matplotlib.pyplot as plt
 import h5py
 
 class PEDRoDataset(Dataset):
-    def __init__(self, data_dir, split='train', transform=None, hdf5_file='pedro_data.h5', max_samples=None, timesteps=1):
+    def __init__(self, data_dir, split='train', transform=None, memmap_file='pedro_data.npy', max_samples=None, timesteps=1):
         self.split = split
-        self.hdf5_file = hdf5_file
+        self.memmap_file = memmap_file
         self.transform = transform
-        #adding padding to images
         self.width = 350
         self.height = 350
         self.timesteps = timesteps
 
-        #loads pkl files
-        if os.path.exists(self.hdf5_file):
-            # Open the HDF5 file for reading
-            with h5py.File(self.hdf5_file, 'r') as f:
-                self.frames = f[f"{split}/frames"]
-                self.boxes = f[f"{split}/boxes"]
-
-        #creates pkl file
-        else: 
+        # Preallocate memmap if file doesn't exist
+        if not os.path.exists(self.memmap_file):
             self.data_dir = os.path.join(data_dir, split)
             self.xml_dir = os.path.join(data_dir.replace('numpy', 'xml'), split)
             self.frame_files = [f for f in sorted(os.listdir(self.data_dir)) if f.endswith('.npy') and self._has_single_bbox(f)]
 
-            #limit frames for debugging
             if max_samples is not None:
                 self.frame_files = self.frame_files[:max_samples]
 
-            frames = []
-            boxes = []
-            #shape = (len(self.frame_files), 2, self.height, self.width) # Frames x C x H x W
-            #data_array = np.memmap('pickle_file', dtype=np.float32, mode='w+', shape=shape)
+            num_samples = len(self.frame_files)
+            # Shape: (num_samples, timesteps, 2, height, width)
+            frames_shape = (num_samples, self.timesteps, 2, self.height, self.width)
+            boxes_shape = (num_samples, 1, 4)
+
+            # Create memmap arrays
+            self.frames = np.memmap(self.memmap_file, dtype=np.float32, mode='w+', shape=frames_shape)
+            self.boxes = np.memmap(self.memmap_file.replace('.npy', '_boxes.npy'), dtype=np.float32, mode='w+', shape=boxes_shape)
 
             for i, frame_file in enumerate(self.frame_files):
-                print("Frame ", i)
+                print(f"Processing frame {i}/{num_samples}...")
 
-                #frame
+                # Process frame
                 frame_path = os.path.join(self.data_dir, frame_file)
                 events = np.load(frame_path)
                 binned_events = self._bin_events(events)
 
-                frame = np.zeros((self.timesteps, 2, self.height, self.width), dtype=np.float32) #0 = negative events, 1 = positive events
+                frame = np.zeros((self.timesteps, 2, self.height, self.width), dtype=np.float32)
                 for t, bin in enumerate(binned_events):
                     x, y, p = bin[:, 1], bin[:, 2], bin[:, 3]
-                    frame[t,p,y,x] = 1 #This ignores repeated events
-                    #np.add.at(frame, (t, p, y, x), 1) #Adds up repeated events
-                frames.append(frame)
+                    frame[t, p, y, x] = 1  # Set event
 
-                #bounding box
+                self.frames[i] = frame
+
+                # Process bounding box
                 box = self._create_bbox(frame_file)
-                self.boxes.append(box)
+                self.boxes[i] = box
 
+            # Flush data to disk
+            self.frames.flush()
+            self.boxes.flush()
+        else:
+            # Load existing memmap
+            self.frames = np.memmap(self.memmap_file, dtype=np.float32, mode='r')
+            self.boxes = np.memmap(self.memmap_file.replace('.npy', '_boxes.npy'), dtype=np.float32, mode='r')
 
-            with h5py.File(self.hdf5_file, 'w') as f:
-                f.create_dataset(f"{split}/frames", data=np.array(frames), compression="gzip")
-                f.create_dataset(f"{split}/boxes", data=np.array(boxes), compression="gzip")
-
-            self.frames = frames
-            self.boxes = boxes
+        self.length = self.frames.shape[0]
 
     def __len__(self):
-        return len(self.frames)
+        return self.length
 
     def __getitem__(self, idx):
         frame = torch.tensor(self.frames[idx], dtype=torch.float32)
@@ -83,14 +80,9 @@ class PEDRoDataset(Dataset):
     
     def _bin_events(self, events):
         times = events[:, 0]
-        frame_window = (times[-1] - times[0]) // self.timesteps
-        window_start = np.arange(self.timesteps) * frame_window + times[0]
-        window_end = window_start + frame_window
-        indices_start = np.searchsorted(times, window_start)
-        indices_end = np.searchsorted(times, window_end)
-        slices = list(zip(indices_start, indices_end))
-
-        return [events[start:end] for start, end in slices]
+        bins = np.linspace(times[0], times[-1], self.timesteps + 1)
+        indices = np.searchsorted(times, bins)
+        return [events[indices[i]:indices[i + 1]] for i in range(self.timesteps)]
     
     def _create_bbox(self, frame_file):
         xml_filename = frame_file.replace('.npy', '.xml')
@@ -110,8 +102,8 @@ class PEDRoDataset(Dataset):
 
 def preprocess_train(timesteps):
     data_dir = os.path.join('PEDRo-dataset', 'numpy')
-    train_dataset = PEDRoDataset(data_dir=data_dir, split='train', pickle_file='train.h5', timesteps=timesteps)
-    val_dataset = PEDRoDataset(data_dir=data_dir, split='val', pickle_file='val.h5', timesteps=timesteps)
+    train_dataset = PEDRoDataset(data_dir=data_dir, split='train', hdf5_file='train.h5', timesteps=timesteps)
+    val_dataset = PEDRoDataset(data_dir=data_dir, split='val', hdf5_file='val.h5', timesteps=timesteps)
 
     train_loader = DataLoader(train_dataset, batch_size=1, shuffle=True, collate_fn=custom_collate_fn, num_workers = 4, persistent_workers=True)
     val_loader = DataLoader(val_dataset, batch_size=1, shuffle=False, collate_fn=custom_collate_fn)
