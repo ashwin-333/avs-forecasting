@@ -5,11 +5,12 @@ from torch.utils.data import Dataset, DataLoader
 import xml.etree.ElementTree as ET
 import pickle
 import matplotlib.pyplot as plt
+import h5py
 
 class PEDRoDataset(Dataset):
-    def __init__(self, data_dir, split='train', transform=None, pickle_file='pedro_data.pkl', max_samples=None, timesteps=1):
+    def __init__(self, data_dir, split='train', transform=None, hdf5_file='pedro_data.h5', max_samples=None, timesteps=1):
         self.split = split
-        self.pickle_file = pickle_file
+        self.hdf5_file = hdf5_file
         self.transform = transform
         #adding padding to images
         self.width = 350
@@ -17,11 +18,11 @@ class PEDRoDataset(Dataset):
         self.timesteps = timesteps
 
         #loads pkl files
-        if os.path.exists(self.pickle_file):
-            with open(self.pickle_file, 'rb') as f:
-                data = pickle.load(f)
-            self.frames = data[split]['frames']
-            self.boxes = data[split]['boxes']
+        if os.path.exists(self.hdf5_file):
+            # Open the HDF5 file for reading
+            with h5py.File(self.hdf5_file, 'r') as f:
+                self.frames = f[f"{split}/frames"]
+                self.boxes = f[f"{split}/boxes"]
 
         #creates pkl file
         else: 
@@ -33,8 +34,8 @@ class PEDRoDataset(Dataset):
             if max_samples is not None:
                 self.frame_files = self.frame_files[:max_samples]
 
-            self.frames = []
-            self.boxes = []
+            frames = []
+            boxes = []
             #shape = (len(self.frame_files), 2, self.height, self.width) # Frames x C x H x W
             #data_array = np.memmap('pickle_file', dtype=np.float32, mode='w+', shape=shape)
 
@@ -51,21 +52,27 @@ class PEDRoDataset(Dataset):
                     x, y, p = bin[:, 1], bin[:, 2], bin[:, 3]
                     frame[t,p,y,x] = 1 #This ignores repeated events
                     #np.add.at(frame, (t, p, y, x), 1) #Adds up repeated events
-                self.frames.append(torch.from_numpy(frame))
+                frames.append(frame)
 
                 #bounding box
                 box = self._create_bbox(frame_file)
                 self.boxes.append(box)
 
-            all_data = {split: {'frames': self.frames, 'boxes': self.boxes}}
-            with open(self.pickle_file, 'wb') as f:
-                pickle.dump(all_data, f)
+
+            with h5py.File(self.hdf5_file, 'w') as f:
+                f.create_dataset(f"{split}/frames", data=np.array(frames), compression="gzip")
+                f.create_dataset(f"{split}/boxes", data=np.array(boxes), compression="gzip")
+
+            self.frames = frames
+            self.boxes = boxes
 
     def __len__(self):
         return len(self.frames)
 
     def __getitem__(self, idx):
-        return self.frames[idx], self.boxes[idx]
+        frame = torch.tensor(self.frames[idx], dtype=torch.float32)
+        box = torch.tensor(self.boxes[idx], dtype=torch.float32)
+        return frame, box
     
     def _has_single_bbox(self, frame_file):
         xml_filename = frame_file.replace('.npy', '.xml')
@@ -103,11 +110,12 @@ class PEDRoDataset(Dataset):
 
 def preprocess_train(timesteps):
     data_dir = os.path.join('PEDRo-dataset', 'numpy')
-    train_dataset = PEDRoDataset(data_dir=data_dir, split='train', pickle_file='train.pkl', timesteps=timesteps)
-    val_dataset = PEDRoDataset(data_dir=data_dir, split='val', pickle_file='val.pkl', timesteps=timesteps)
+    train_dataset = PEDRoDataset(data_dir=data_dir, split='train', pickle_file='train.h5', timesteps=timesteps)
+    val_dataset = PEDRoDataset(data_dir=data_dir, split='val', pickle_file='val.h5', timesteps=timesteps)
 
-    train_loader = DataLoader(train_dataset, batch_size=32, shuffle=True, collate_fn=custom_collate_fn, num_workers = 4, persistent_workers=True)
-    val_loader = DataLoader(val_dataset, batch_size=32, shuffle=False, collate_fn=custom_collate_fn)
+    train_loader = DataLoader(train_dataset, batch_size=1, shuffle=True, collate_fn=custom_collate_fn, num_workers = 4, persistent_workers=True)
+    val_loader = DataLoader(val_dataset, batch_size=1, shuffle=False, collate_fn=custom_collate_fn)
+    print("done")
     return (train_loader, val_loader)
 
 def preprocess_test(timesteps):
