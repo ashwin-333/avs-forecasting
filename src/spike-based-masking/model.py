@@ -9,27 +9,33 @@ class SCNN(nn.Module):
     def __init__(self, beta, spike_grad):
         super(SCNN, self).__init__()
         self.net = nn.Sequential(
-            nn.Conv2d(2, 64, 1, bias=False),
+            nn.Conv2d(2, 64, 3, bias=False),
             nn.BatchNorm2d(64),
             snn.Leaky(beta=beta, spike_grad=spike_grad, init_hidden=True),
             nn.MaxPool2d(2),
-            nn.Conv2d(64, 64, 3, bias=False),
-            nn.BatchNorm2d(64),
-            snn.Leaky(beta=beta, spike_grad=spike_grad, init_hidden=True),
-            nn.Conv2d(64, 64, 3, bias=False),
-            nn.BatchNorm2d(64),
-            snn.Leaky(beta=beta, spike_grad=spike_grad, init_hidden=True),
-            nn.MaxPool2d(2),
-            nn.Conv2d(64, 128, 1, bias=False),
+            nn.Conv2d(64, 128, 3, bias=False),
             nn.BatchNorm2d(128),
             snn.Leaky(beta=beta, spike_grad=spike_grad, init_hidden=True),
             nn.MaxPool2d(2),
-            nn.Conv2d(128, 128, 3, bias=False),
-            nn.BatchNorm2d(128),
+            nn.Conv2d(128, 256, 3, bias=False),
+            nn.BatchNorm2d(256),
+            snn.Leaky(beta=beta, spike_grad=spike_grad, init_hidden=True),
+            nn.Conv2d(256, 256, 3, bias=False),
+            nn.BatchNorm2d(256),
             snn.Leaky(beta=beta, spike_grad=spike_grad, init_hidden=True),
             nn.MaxPool2d(2),
-            nn.Conv2d(128, 128, 3, bias=False, stride=2),
-            nn.BatchNorm2d(128),
+            nn.Conv2d(256, 512, 3, bias=False),
+            nn.BatchNorm2d(512),
+            snn.Leaky(beta=beta, spike_grad=spike_grad, init_hidden=True),
+            nn.Conv2d(512, 512, 3, bias=False),
+            nn.BatchNorm2d(512),
+            snn.Leaky(beta=beta, spike_grad=spike_grad, init_hidden=True),
+            nn.MaxPool2d(2),
+            nn.Conv2d(512, 512, 3, bias=False),
+            nn.BatchNorm2d(512),
+            snn.Leaky(beta=beta, spike_grad=spike_grad, init_hidden=True),
+            nn.Conv2d(512, 512, 3, bias=False),
+            nn.BatchNorm2d(512),
             snn.Leaky(beta=beta, spike_grad=spike_grad, init_hidden=True),
             nn.MaxPool2d(2))
     def forward(self, x: torch.Tensor):
@@ -46,9 +52,9 @@ class FIL(nn.Module):
         super(FIL, self).__init__()
         self.net = nn.Sequential(
             nn.Flatten(),
-            nn.Linear(in_channels, out_channels),
-            #snn.Leaky(beta=beta, spike_grad=spike_grad, init_hidden=True),
-            #nn.Linear(mid_channels, out_channels),
+            nn.Linear(in_channels, mid_channels),
+            snn.Leaky(beta=beta, spike_grad=spike_grad, init_hidden=True),
+            nn.Linear(mid_channels, out_channels),
             snn.Leaky(beta=beta, spike_grad=spike_grad, init_hidden=True, output=True, reset_mechanism="none"),
         )
     def forward(self, x: torch.Tensor):
@@ -64,7 +70,7 @@ class Model(nn.Module):
         beta = 0.5
         spike_grad = surrogate.atan()
         self.scnn = SCNN(beta, spike_grad)
-        self.fil = FIL(2048, 4096, 4, beta=beta, spike_grad=spike_grad)
+        self.fil = FIL(14336, 4096, 4, beta=beta, spike_grad=spike_grad)
         
     def forward(self, x):
         # Define the forward pass

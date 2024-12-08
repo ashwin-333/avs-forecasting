@@ -10,8 +10,8 @@ import utils
 
 
 
-def train_model(trainloader, valloader):
-    device = torch.device("cuda") if torch.cuda.is_available() else torch.device("cpu")
+def train_model(trainloader, valloader, device):
+    
     loss_fn = distance_box_iou_loss
     accuracy_fn = utils.calculate_iou
 
@@ -19,7 +19,7 @@ def train_model(trainloader, valloader):
     net.apply(initialize_weights)
     optimizer = torch.optim.Adam(net.parameters(), lr=0.001)
 
-    num_epochs = 100
+    num_epochs = 40
 
     train_loss_hist = []
     train_iou_hist = []
@@ -70,8 +70,10 @@ def train_model(trainloader, valloader):
         val_iou_hist.append(val_iou)
         
         print(f"Epoch {epoch+1}/{num_epochs}, Validation Loss: {val_loss:.4f}, Validation Accuracy: {val_iou:.4f}")
-        if epoch+1 % 10 == 0:
-            utils.save_checkpoint(net, optimizer, epoch, train_loss_hist[-1].item(), checkpoint_path="checkpoint.pth")
+        if (epoch+1) % 10 == 0:
+            utils.save_checkpoint(net, optimizer, epoch, train_loss_hist[-1].item(), checkpoint_path=f"checkpoint{epoch}.pth")
+    
+    utils.save_checkpoint(net, optimizer, epoch, train_loss_hist[-1].item(), checkpoint_path=f"model.pth")
 
     epochs = list(range(1, num_epochs + 1))
 
